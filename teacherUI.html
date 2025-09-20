@@ -165,4 +165,127 @@
                 presentCount: presentStudents.length,
                 absentCount: absentStudents.length,
                 present: presentStudents.map(s => ({ rollNo: s.rollNo, name: s.name })),
-                absent: absentStude
+                absent: absentStudents.map(s => ({ rollNo: s.rollNo, name: s.name }))
+            };
+
+            try {
+                saveButton.disabled = true;
+                saveButton.textContent = "Saving...";
+                await addDoc(collection(db, "attendance"), attendanceRecord);
+                status.textContent = "Attendance saved successfully!";
+                saveButton.textContent = "Saved!";
+            } catch (error) {
+                console.error("Error saving attendance: ", error);
+                status.textContent = "Error saving attendance.";
+                saveButton.disabled = false;
+                saveButton.textContent = "Save Attendance";
+            }
+        });
+
+        seedButton.addEventListener('click', async () => {
+            const sampleData = {
+                "IT-A": [ { rollNo: "A01", name: "Rahul Sharma", deviceId: "ita-001" }, { rollNo: "A02", name: "Priya Patel", deviceId: "ita-002" }, { rollNo: "A03", name: "Amit Singh", deviceId: "ita-003" } ],
+                "IT-B": [ { rollNo: "B01", name: "Anjali Mehta", deviceId: "itb-001" }, { rollNo: "B02", name: "Deepak Gupta", deviceId: "itb-002" }, { rollNo: "B03", name: "Kavita Nair", deviceId: "itb-003" } ],
+                "CS-A": [ { rollNo: "C01", name: "Sanjay Kumar", deviceId: "csa-001" }, { rollNo: "C02", name: "Geeta Yadav", deviceId: "csa-002" } ],
+                "CS-B": [ { rollNo: "D01", name: "Neha Agarwal", deviceId: "csb-001" }, { rollNo: "D02", name: "Arun Khanna", deviceId: "csb-002" } ]
+            };
+            status.textContent = "Seeding database...";
+            seedButton.disabled = true;
+            try {
+                for (const division in sampleData) {
+                    await setDoc(doc(db, "rosters", division), { students: sampleData[division] });
+                }
+                status.textContent = "Database seeded successfully!";
+                seedContainer.style.display = 'none';
+            } catch (error) {
+                console.error("Error seeding database: ", error);
+                status.textContent = "Error seeding database. Check console.";
+                seedButton.disabled = false;
+            }
+        });
+
+        // --- UI Functions ---
+        function setupForScan(roster) {
+            scanButton.disabled = true;
+            classDivisionSelector.disabled = true;
+            scanButton.classList.add('pulsing');
+            scanText.textContent = 'Scanning...';
+            status.textContent = 'Simulating scan for student devices...';
+            
+            studentList.innerHTML = '';
+            roster.forEach(student => {
+                const studentEl = document.createElement('div');
+                studentEl.id = `student-${student.deviceId}`;
+                studentEl.className = 'flex items-center justify-between p-2 border-b last:border-b-0';
+                studentEl.innerHTML = `
+                    <div>
+                        <span class="font-bold text-gray-700">${student.rollNo}</span>
+                        <span class="ml-2 text-gray-600">${student.name}</span>
+                    </div>
+                    <span class="status-badge text-xs font-semibold px-2 py-1 rounded-full bg-red-100 text-red-800">ABSENT</span>
+                `;
+                studentList.appendChild(studentEl);
+            });
+            updateAnalytics(0, roster.length, roster.length);
+        }
+
+        function simulateScan(roster) {
+            const presentStudents = [...roster].sort(() => 0.5 - Math.random()).slice(0, Math.floor(Math.random() * (roster.length + 1)));
+            let detectedCount = 0;
+
+            scanInterval = setInterval(() => {
+                if (detectedCount < presentStudents.length) {
+                    const studentToMark = presentStudents[detectedCount];
+                    markStudentPresent(studentToMark.deviceId);
+                    presentDeviceIds.add(studentToMark.deviceId);
+                    detectedCount++;
+                    updateAnalytics(detectedCount, roster.length - detectedCount, roster.length);
+                } else {
+                    clearInterval(scanInterval);
+                    scanComplete();
+                }
+            }, 400); 
+        }
+        
+        function markStudentPresent(deviceId) {
+            const studentEl = document.getElementById(`student-${deviceId}`);
+            if (studentEl) {
+                const statusBadge = studentEl.querySelector('.status-badge');
+                statusBadge.textContent = 'PRESENT';
+                statusBadge.classList.remove('bg-red-100', 'text-red-800');
+                statusBadge.classList.add('bg-green-100', 'text-green-800');
+            }
+        }
+        
+        function updateAnalytics(present, absent, total) {
+            analyticsSummary.classList.remove('hidden');
+            analyticsSummary.innerHTML = `
+                <div class="flex justify-around text-center">
+                    <div>
+                        <p class="text-xs text-gray-500">PRESENT</p>
+                        <p class="text-xl font-bold text-green-600">${present}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-500">ABSENT</p>
+                        <p class="text-xl font-bold text-red-600">${absent}</p>
+                    </div>
+                    <div>
+                        <p class="text-xs text-gray-500">TOTAL</p>
+                        <p class="text-xl font-bold text-gray-700">${total}</p>
+                    </div>
+                </div>`;
+        }
+
+        function scanComplete() {
+            scanButton.disabled = false;
+            classDivisionSelector.disabled = false;
+            scanButton.classList.remove('pulsing');
+            scanText.textContent = 'Start New Scan';
+            status.textContent = 'Scan complete. Ready to save.';
+            saveButton.classList.remove('hidden');
+            saveButton.disabled = false;
+            saveButton.textContent = "Save Attendance";
+        }
+    </script>
+</body>
+</html>
