@@ -45,19 +45,22 @@
             
             <!-- Status Message -->
             <div id="status" class="mt-4 text-sm text-center text-gray-600 h-6"></div>
+            
         </div>
     </div>
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, collection, getDocs } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, getDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        setLogLevel('debug');
 
         const firebaseConfig = {
             apiKey: "AIzaSyA4rGlHhneYX2ILxoFBUed7zmV-uv48uyM",
             authDomain: "attendance-system-36917.firebaseapp.com",
             projectId: "attendance-system-36917",
-            storageBucket: "attendance-system-36917.firebasestorage.app",
+            storageBucket: "attendance-system-36917.appspot.com",
             messagingSenderId: "129607548150",
             appId: "1:129607548150:web:182e21e03e793dc08840d7"
         };
@@ -66,10 +69,27 @@
         const db = getFirestore(app);
         const auth = getAuth(app);
 
+        let isAuthReady = false;
+
         const roleSelect = document.getElementById('role-select');
         const loginFormContainer = document.getElementById('login-form-container');
         const loginButton = document.getElementById('loginButton');
         const statusEl = document.getElementById('status');
+
+        onAuthStateChanged(auth, async user => {
+            if (user) {
+                isAuthReady = true;
+                loginButton.disabled = false;
+                statusEl.textContent = "Ready to log in.";
+            } else {
+                try {
+                    await signInAnonymously(auth);
+                } catch (error) {
+                    statusEl.textContent = "Error: Could not connect to authentication service.";
+                    console.error(error);
+                }
+            }
+        });
 
         function renderForm(role) {
             loginFormContainer.innerHTML = '';
@@ -90,22 +110,30 @@
                         <label for="studentName" class="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
                         <input type="text" id="studentName" placeholder="e.g., Anjali Mehta" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
                     </div>
+                    <div>
+                        <label for="studentDivision" class="block text-sm font-medium text-gray-700 mb-1">Division</label>
+                        <select id="studentDivision" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                            <option value="IT-A">IT-A</option>
+                            <option value="IT-B" selected>IT-B</option>
+                            <option value="CS-A">CS-A</option>
+                            <option value="CS-B">CS-B</option>
+                        </select>
+                    </div>
                 `;
             }
         }
 
-        roleSelect.addEventListener('change', () => {
-            renderForm(roleSelect.value);
+        roleSelect.addEventListener('change', (event) => {
+            renderForm(event.target.value);
             statusEl.textContent = '';
         });
 
-        renderForm(roleSelect.value);
-
-        onAuthStateChanged(auth, user => {
-            if (!user) signInAnonymously(auth).catch(console.error);
-        });
-
         loginButton.addEventListener('click', async () => {
+            if (!isAuthReady) {
+                statusEl.textContent = "Auth service not ready.";
+                return;
+            }
+
             const role = roleSelect.value;
             statusEl.textContent = 'Logging in...';
             loginButton.disabled = true;
@@ -121,37 +149,35 @@
             } else {
                 const rollNo = document.getElementById('rollNo').value.trim();
                 const studentName = document.getElementById('studentName').value.trim();
+                const division = document.getElementById('studentDivision').value;
 
                 if (!rollNo || !studentName) {
-                    statusEl.textContent = 'Please enter both Roll Number and Full Name.';
+                    statusEl.textContent = 'Enter Roll No and Name.';
                     loginButton.disabled = false;
                     return;
                 }
 
+                // Verify student exists in Firestore
                 try {
-                    const rosterSnapshot = await getDocs(collection(db, "rosters"));
-                    let validStudent = null;
-
-                    rosterSnapshot.forEach(doc => {
-                        const students = doc.data().students || [];
-                        const found = students.find(s => s.rollNo === rollNo && s.name.toLowerCase() === studentName.toLowerCase());
-                        if (found) validStudent = { ...found, division: doc.id };
-                    });
-
-                    if (validStudent) {
-                        window.location.href = `student-dashboard.html?rollNo=${encodeURIComponent(validStudent.rollNo)}&name=${encodeURIComponent(validStudent.name)}&division=${encodeURIComponent(validStudent.division)}`;
+                    const rosterRef = doc(db, "rosters", division);
+                    const rosterDoc = await getDoc(rosterRef);
+                    const roster = rosterDoc.exists() ? rosterDoc.data().students : [];
+                    const found = roster.find(s => s.rollNo === rollNo && s.name.toLowerCase() === studentName.toLowerCase());
+                    if (found) {
+                        window.location.href = `student-dashboard.html?rollNo=${encodeURIComponent(rollNo)}&studentName=${encodeURIComponent(studentName)}&division=${division}`;
                     } else {
-                        statusEl.textContent = 'Student not found in database.';
+                        statusEl.textContent = 'Student not found in this division.';
                         loginButton.disabled = false;
                     }
-
                 } catch (error) {
                     console.error(error);
-                    statusEl.textContent = 'Error checking student data.';
+                    statusEl.textContent = 'Error verifying student.';
                     loginButton.disabled = false;
                 }
             }
         });
+
+        renderForm(roleSelect.value);
     </script>
 </body>
 </html>
