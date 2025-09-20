@@ -51,7 +51,8 @@
 
     <script type="module">
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        // Added signInWithEmailAndPassword to imports
+        import { getAuth, signInAnonymously, onAuthStateChanged, signInWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
         import { getFirestore, doc, getDoc, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
         setLogLevel('debug');
@@ -83,6 +84,7 @@
                 statusEl.textContent = "Ready to log in.";
             } else {
                 try {
+                    // Only sign in anonymously if no user is present at all (fresh session or logged out)
                     await signInAnonymously(auth);
                 } catch (error) {
                     statusEl.textContent = "Error: Could not connect to authentication service.";
@@ -96,11 +98,16 @@
             if (role === 'teacher') {
                 loginFormContainer.innerHTML = `
                     <div>
+                        <label for="teacherEmail" class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                        <input type="email" id="teacherEmail" placeholder="teacher@example.com" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
+                    </div>
+                    <div>
                         <label for="teacherPassword" class="block text-sm font-medium text-gray-700 mb-1">Password</label>
                         <input type="password" id="teacherPassword" class="w-full px-4 py-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500">
                     </div>
                 `;
             } else {
+                // Student form remains the same
                 loginFormContainer.innerHTML = `
                     <div>
                         <label for="rollNo" class="block text-sm font-medium text-gray-700 mb-1">Roll Number</label>
@@ -139,14 +146,32 @@
             loginButton.disabled = true;
 
             if (role === 'teacher') {
+                const email = document.getElementById('teacherEmail').value.trim();
                 const password = document.getElementById('teacherPassword').value;
-                if (password === 'teacher123') {
-                    window.location.href = 'teacher-dashboard.html';
-                } else {
-                    statusEl.textContent = 'Invalid password.';
+
+                if (!email || !password) {
+                    statusEl.textContent = 'Please enter both email and password.';
+                    loginButton.disabled = false;
+                    return;
+                }
+
+                try {
+                    await signInWithEmailAndPassword(auth, email, password);
+                    // Redirect to the teacherUI.html after successful login
+                    window.location.href = 'teacherUI.html'; 
+                } catch (error) {
+                    console.error("Teacher login error:", error);
+                    if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
+                        statusEl.textContent = 'Invalid email or password.';
+                    } else if (error.code === 'auth/invalid-email') {
+                        statusEl.textContent = 'Invalid email format.';
+                    } else {
+                        statusEl.textContent = `Login failed: ${error.message}`;
+                    }
                     loginButton.disabled = false;
                 }
             } else {
+                // Student login logic (remains the same)
                 const rollNo = document.getElementById('rollNo').value.trim();
                 const studentName = document.getElementById('studentName').value.trim();
                 const division = document.getElementById('studentDivision').value;
